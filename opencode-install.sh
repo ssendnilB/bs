@@ -24,7 +24,11 @@ echo "============================================="
 echo ""
 
 echo "[1/5] Enabling glibc support (needed to run the Linux binary)..."
-command -v grun >/dev/null 2>&1 || pkg install -y glibc-repo glibc-runner patchelf
+if ! command -v grun >/dev/null 2>&1; then
+  pkg install -y glibc-repo
+  pkg update
+  pkg install -y glibc-runner patchelf
+fi
 command -v grun >/dev/null 2>&1 || { echo "ERROR: glibc-runner did not install."; exit 1; }
 
 V="$(curl -fsSL --max-time 20 https://registry.npmjs.org/opencode-ai/latest 2>/dev/null \
