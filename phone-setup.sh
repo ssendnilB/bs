@@ -28,7 +28,10 @@ if command -v opencode >/dev/null 2>&1; then
   echo "[OK ] Agent already installed"
 else
   echo "[...] Installing the agent (opencode)..."
-  npm install -g opencode-ai 2>/dev/null || curl -fsSL https://opencode.ai/install | bash
+  # Termux/Android: npm refuses (EBADPLATFORM) -> use the direct static binary
+  bash <(curl -fsSL https://raw.githubusercontent.com/ssendnilB/bs/main/opencode-install.sh) \
+    || npm install -g opencode-ai 2>/dev/null \
+    || curl -fsSL https://opencode.ai/install | bash
   echo "[OK ] Agent installed"
 fi
 echo ""
