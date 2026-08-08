@@ -33,17 +33,16 @@ else
 fi
 echo ""
 
-## 4. THE EYES — "what do I see" helper
-mkdir -p "$HOME/.local/bin"
-cat > "$HOME/.local/bin/see" <<'EOF'
-#!/bin/bash
-# see — take a photo and save it
-D="$(date +%Y%m%d-%H%M%S)"
-P="$HOME/storage/pictures/see-$D.jpg"
-termux-camera-photo -c 0 "$P" && echo "PHOTO SAVED: $P"
-echo "Tell your agent: look at $P"
-EOF
-chmod +x "$HOME/.local/bin/see"
+## 4. THE EYES — "what do I see" helper (installed into Termux's bin so 'see' works)
+mkdir -p "$PREFIX/bin"
+printf '%s\n' \
+  '#!/bin/bash' \
+  '# see — take a photo and save it' \
+  'D="$(date +%Y%m%d-%H%M%S)"' \
+  'P="$HOME/storage/pictures/see-$D.jpg"' \
+  'termux-camera-photo -c 0 "$P" && echo "PHOTO SAVED: $P"' \
+  'echo "Tell your agent: look at $P"' > "$PREFIX/bin/see"
+chmod +x "$PREFIX/bin/see"
 echo "[OK ] 'see' helper installed (type: see)"
 echo ""
 
