@@ -1,61 +1,67 @@
 #!/data/data/com.termux/files/usr/bin/bash
 #
-## opencode-install.sh — installs the opencode agent on Termux/Android (arm64)
+## opencode-install.sh v3 — installs the opencode agent on Termux/Android (arm64)
 ##
-## Why not npm? npm refuses Android ("EBADPLATFORM"). opencode ships NO static
-## build — every linux-arm64 binary is dynamically linked to glibc, whose loader
-## (/lib/ld-linux-aarch64.so.1) does not exist on Termux. So we:
-##   1. install Termux's official glibc support (glibc-repo + glibc-runner),
-##   2. fetch the glibc linux-arm64 binary from the npm registry,
-##   3. "grun --configure" it — this uses patchelf to point the binary's
-##      interpreter at Termux's glibc loader and set its RPATH, making it run
-##      natively (and letting opencode re-exec itself when it spawns its server),
-##   4. leave a small launcher at $PREFIX/bin/opencode.
+## NEW ROUTE (2026-08-09): pre-built community packages from
+##   github.com/Hope2333/opencode-termux (release Push260803)
+## The package wraps the official opencode binary with bun-termux-loader so it
+## runs natively on Termux — no chroot, no proot. This REPLACES the old
+## glibc-runner/grun route, which segfaulted on Android's kernel protections.
+##
+## IMMUTABILITY: the agent version is PINNED below. It cannot silently change.
+## The .deb is kept in a local vault so a phone reimage can restore it offline
+## (mirrors the GrapheneOS vault philosophy).
+## PERMANENCE: a Termux:Boot autostart script is written so the agent comes
+## back after every reboot (requires the Termux:Boot app from F-Droid).
 #
 set -e
-
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-BINDIR="$PREFIX/lib/opencode"
+
+# PIN the exact agent build. Update deliberately (this is your safety pin).
+V="1.18.15"
+REL="Push260803"
+BASE="https://github.com/Hope2333/opencode-termux/releases/download/${REL}"
 
 echo ""
 echo "============================================="
-echo "  OPENCODE AGENT — TERMUX INSTALL (arm64)"
+echo "  OPENCODE AGENT — TERMUX INSTALL v3 (arm64)"
+echo "  pinned opencode v${V}"
 echo "============================================="
 echo ""
 
-echo "[1/5] Enabling glibc support (needed to run the Linux binary)..."
-if ! command -v grun >/dev/null 2>&1; then
-  pkg install -y glibc-repo
-  pkg update
-  pkg install -y glibc-runner patchelf
+echo "[1/5] Installing runtime deps (glibc + openssl-glibc)..."
+pkg install -y glibc-repo bash ncurses ripgrep
+pkg update
+pkg install -y glibc openssl-glibc
+
+echo "[2/5] Downloading pinned agent package v${V} (~41 MB)..."
+VAULT="$HOME/agent-vault"
+mkdir -p "$VAULT"
+DEB="$VAULT/opencode_${V}_aarch64.deb"
+if [ ! -f "$DEB" ]; then
+  curl -fSL --max-time 600 -o "$DEB" "$BASE/opencode_${V}_aarch64.deb"
+  echo "      saved vault copy: $DEB"
+else
+  echo "      (already in vault — keeping local copy)"
 fi
-command -v grun >/dev/null 2>&1 || { echo "ERROR: glibc-runner did not install."; exit 1; }
 
-V="$(curl -fsSL --max-time 20 https://registry.npmjs.org/opencode-ai/latest 2>/dev/null \
-  | grep -oE '"version": *"[0-9.]+"' | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')"
-[ -n "$V" ] || V="1.18.15"
-echo "[2/5] Latest agent version: $V"
+echo "[3/5] Installing the package..."
+dpkg -i "$DEB" || apt install -f -y
 
-echo "[3/5] Downloading the binary (about 175 MB — takes a minute)..."
-TMP="$(mktemp -d)"
-cd "$TMP"
-curl -fSL --max-time 600 -o oc.tgz \
-  "https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-${V}.tgz"
-tar -xzf oc.tgz
-mkdir -p "$BINDIR"
-mv -f package/bin/opencode "$BINDIR/opencode"
-chmod 755 "$BINDIR/opencode"
+echo "[4/5] Verifying the agent runs..."
+opencode --version || { echo "ERROR: agent did not start. Paste the output back to Smith."; exit 1; }
 
-echo "[4/5] Patching binary for native Termux execution (grun --configure)..."
-grun --configure "$BINDIR/opencode"
-
-echo "[5/5] Writing launcher at $PREFIX/bin/opencode..."
-printf '#!/data/data/com.termux/files/usr/bin/sh\nunset LD_PRELOAD\nexec "%s/opencode" "$@"\n' "$BINDIR" > "$PREFIX/bin/opencode"
-chmod 755 "$PREFIX/bin/opencode"
-rm -rf "$TMP"
+echo "[5/5] Writing Termux:Boot autostart for permanence..."
+mkdir -p "$HOME/.termux/boot"
+printf '#!/data/data/com.termux/files/usr/bin/sh\nunset LD_PRELOAD\ntmux new-session -d -s agent opencode 2>/dev/null || true\n' > "$HOME/.termux/boot/opencode-boot.sh"
+chmod 755 "$HOME/.termux/boot/opencode-boot.sh"
 
 echo ""
 echo "============================================="
-echo "  DONE. Type:  opencode --version"
-echo "       then:  opencode       to start"
+echo "  DONE. opencode v${V} is installed."
+echo "  - Vault (offline reinstall kit):"
+echo "      $VAULT/opencode_${V}_aarch64.deb"
+echo "  - Type:  opencode      to start the agent"
+echo "  - Permanent at boot: install 'Termux:Boot' from F-Droid,"
+echo "    then this session auto-starts the agent every reboot."
 echo "============================================="
